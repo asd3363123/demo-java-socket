@@ -22,6 +22,9 @@ public class SocketUtil {
             "Content-Length: 13\n" +
             "Date: Sat, 18 May 2019 10:00:56 GMT\n";
 
+    /**
+     * 精细式读流
+     */
     public static byte[] getHttpInput(InputStream is) throws IOException {
         ByteArrayBuilder bd = new ByteArrayBuilder();
         int lastOne = -1, lastTwo = -1;
@@ -52,16 +55,50 @@ public class SocketUtil {
         System.out.println("Content-Length: " + len);
 
         if (len > 0) {
-            byte[] rest = new byte[len + 100];
+            byte[] rest = new byte[len];
             len = is.read(rest);
             if (len > 0) {
                 System.out.println("len AAAAAAAAAAAAAAAAAAAAA = " + len);
                 bd.write(rest, 0, len);
             }
+        } else if (httpHead.contains("Transfer-Encoding: chunked")) {
+            //TODO f3
+            int first = -1;
+            while ((first = is.read()) > 0) {
+                byte[] chunked = getChunked(is, first);
+                bd.write(chunked);
+            }
+            if (first == 0) {
+                bd.append((byte) 0);
+            }
+            //{"timestamp":"2019-05-19T08:05:33.998+0000","status":415,"error":"Unsupported Media Type","message":"Content type 'multipart/form-data;boundary=1c96d49d-f784-4985-8709-9aa62154f859;charset=UTF-8' not supported","path":"/alf/serverConfig/time"}
+            //0
         }
         //=======================================================
 
 
+        return bd.toByteArray();
+    }
+
+    private static byte[] getChunked(InputStream is, int first) throws IOException {
+        StringBuilder size_16 = new StringBuilder((char) first);
+        while ((first = is.read()) != '\n') {
+            size_16.append((char) first);
+        }
+        String size_str = size_16.toString().replaceAll("\r", "");
+        System.out.println(size_str);
+        int size = Integer.parseInt(size_str, 16);
+
+        byte[] chunked = new byte[size];
+        int a = is.read(chunked);
+        if (a < 1) {
+            return new byte[0];
+        }
+        ByteArrayBuilder bd = new ByteArrayBuilder();
+        bd.write(size_str.getBytes(StandardCharsets.UTF_8));
+        bd.write('\r');
+        bd.write('\n');
+        bd.write(chunked, 0, a);
         return bd.toByteArray();
     }
 
@@ -82,5 +119,20 @@ public class SocketUtil {
         String temp = new String(src, StandardCharsets.UTF_8);
         temp = temp.replaceAll("Host: " + oldHost, "Host: " + newHost);
         return temp.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 粗放式读流
+     */
+    public static byte[] testGetHttpInput(InputStream is) throws IOException {
+        ByteArrayBuilder byteArrayBuilder = new ByteArrayBuilder();
+        int len = -1;
+        while ((len = is.read()) > -1) {
+            byteArrayBuilder.append(len);
+            if (len == 0) {
+                break;
+            }
+        }
+        return byteArrayBuilder.toByteArray();
     }
 }
